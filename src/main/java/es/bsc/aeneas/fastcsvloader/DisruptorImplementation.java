@@ -1,7 +1,9 @@
 package es.bsc.aeneas.fastcsvloader;
 
+import com.codahale.metrics.MetricRegistry;
 import com.lmax.disruptor.BusySpinWaitStrategy;
 import com.lmax.disruptor.EventFactory;
+import com.lmax.disruptor.PhasedBackoffWaitStrategy;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
@@ -14,6 +16,7 @@ import java.io.IOException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -22,6 +25,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * Created by ccugnasc on 3/3/14.
  */
 public class DisruptorImplementation {
+    public final static MetricRegistry metrics = new MetricRegistry();
     Logger log = LoggerFactory.getLogger(DisruptorImplementation.class);
     final private CqlFrameLoader cqlFrameLoader;
     final private TrajectoryReader trajectoryReader;
@@ -50,7 +54,7 @@ public class DisruptorImplementation {
     public void execute() throws InterruptedException {
         // Executor that will be used to construct new threads for consumers
         int nConsumers = Integer.getInteger("disruptor.consumers",16);
-        log.info("Using {} concurrent consumers",nConsumers);
+        checkArgument(((nConsumers != 0) && ((nConsumers & (~nConsumers + 1)) == nConsumers)),"Number of consumers must be a power of 2");
         Executor executor = Executors.newFixedThreadPool(nConsumers, new ThreadFactory() {
             private int i = 0;
 
@@ -64,7 +68,10 @@ public class DisruptorImplementation {
         });
 
         // Specify the size of the ring buffer, must be power of 2.
-        int bufferSize = 1024;
+        int bufferSize = Integer.getInteger("bufferSize",1024);
+        checkArgument(((bufferSize != 0) && ((bufferSize & (~bufferSize + 1)) == bufferSize)),"Buffer size must be a power of 2");
+
+        log.info("Using {} concurrent consumers with a buffer size of {}",nConsumers,bufferSize);
 // Construct the Disruptor
 
         Disruptor<String[]> disruptor = new Disruptor(new EventFactory<String[]>() {
@@ -74,7 +81,11 @@ public class DisruptorImplementation {
                 return new String[trajectoryReader.numberOfFields];
             }
         }, bufferSize, executor,
-                ProducerType.SINGLE, new BusySpinWaitStrategy());
+                ProducerType.SINGLE, PhasedBackoffWaitStrategy.withLiteLock(
+                500,
+                5000,
+                TimeUnit.MILLISECONDS
+        ));
         RingBuffer<String[]> ringBuffer = disruptor.getRingBuffer();
 
 
