@@ -15,7 +15,10 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.NoSuchElementException;
+import java.util.Spliterator;
+import java.util.function.Consumer;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -55,10 +58,17 @@ public class MappedReader extends TrajectoryReader {
     }
 
 
+
+
     @Override
     public boolean hasNext() {
         //To check
         return buffer.remaining() > 0;
+
+    }
+
+    @Override
+    public void forEachRemaining(Consumer<? super String[]> action) {
 
     }
 

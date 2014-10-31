@@ -8,13 +8,11 @@ package es.bsc.aeneas.fastcsvloader;
 import com.datastax.driver.core.*;
 import com.datastax.driver.core.policies.RoundRobinPolicy;
 import com.datastax.driver.core.policies.TokenAwarePolicy;
-import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -24,12 +22,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class CqlFrameLoader {
 
     private final static Logger log = LoggerFactory.getLogger(CqlFrameLoader.class);
+    private final CqlTypeConverter parser;
 
 
     protected Session session;
     protected PreparedStatement query;
     private Cluster cluster = null;
-    private final Parser[] parsers;
 
 
     /**
@@ -40,52 +38,17 @@ public class CqlFrameLoader {
         this.session = cluster().connect();
         log.info("preparing query \"{}\"", queryText);
         query = session.prepare(checkNotNull(queryText));
-        int i = 0;
-        parsers=new Parser[query.getVariables().size()];
-        for (ColumnDefinitions.Definition cd : query.getVariables()) {
-            //TODO not really efficient
-            Parser parser = checkNotNull(parserMap.get(cd.getType().asJavaClass()), "Parser not found for " + cd.getType());
-            parsers[i++] = parser;
-        }
-    }
-
-    private final static Map<Class, Parser> parserMap;
-
-    static {
-        ImmutableMap.Builder<Class, Parser> builder = ImmutableMap.builder();
-        builder.put(Integer.class, new Parser() {
-            @Override
-            public Object parse(String string) {
-                return Integer.parseInt(string);
-            }
-        });
-        builder.put(String.class, new Parser() {
-            @Override
-            public Object parse(String string) {
-                return string;
-            }
-        });
-        builder.put(Double.class, new Parser() {
-            @Override
-            public Object parse(String string) {
-                return Double.parseDouble(string);
-            }
-        });
-        builder.put(Float.class, new Parser() {
-            @Override
-            public Object parse(String string) {
-                return Float.parseFloat(string);
-            }
-        });
-        parserMap=builder.build();
+        parser=new CqlTypeConverter(query.getVariables().asList());
 
     }
+
+
 
 
     public void insert(String[] frame) throws Exception {
         Object[] binding = new Object[frame.length];
-        for (int i = 0;i<parsers.length;i++) {
-             binding[i] = parsers[i].parse(frame[i]);
+        for (int i = 0;i<parser.parsers.length;i++) {
+             binding[i] = parser.parsers[i].parse(frame[i]);
         }
         session.execute(query.bind(binding));
     }
@@ -93,15 +56,13 @@ public class CqlFrameLoader {
 
     public void addToBatch(BatchStatement batchStatement, String[] frame) throws Exception {
         Object[] binding = new Object[frame.length];
-        for (int i = 0;i<parsers.length;i++) {
-            binding[i] = parsers[i].parse(frame[i]);
+        for (int i = 0;i<parser.parsers.length;i++) {
+            binding[i] = parser.parsers[i].parse(frame[i]);
         }
         batchStatement.add(query.bind(binding));
     }
 
-    private interface Parser {
-        Object parse(String string);
-    }
+
 
     public void insertBatch(BatchStatement batchStatement) throws Exception {
         if (log.isDebugEnabled())
