@@ -34,7 +34,7 @@ public class SSTableWriter {
             throw new IllegalArgumentException("You must provide the name of the file and the query");
         String file=checkNotNull(args[0],"Fist argument (file name) missing");
         String query=checkNotNull(args[1],"Second argument (query) missing");
-        String schema=checkNotNull(args[1],"Second argument (schema) missing");
+        String schema=checkNotNull(args[2],"Second argument (schema) missing");
         write(file,query, schema);
 
     }
