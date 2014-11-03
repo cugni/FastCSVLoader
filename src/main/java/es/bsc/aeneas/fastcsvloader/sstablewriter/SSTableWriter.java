@@ -31,10 +31,10 @@ public class SSTableWriter {
 
     public static void main(String args[]) throws Exception {
         if(args.length!=3)
-            throw new IllegalArgumentException("You must provide the name of the file and the query");
+            throw new IllegalArgumentException("You must provide the name of the file and the query. Found "+args.length);
         String file=checkNotNull(args[0],"Fist argument (file name) missing");
         String query=checkNotNull(args[1],"Second argument (query) missing");
-        String schema=checkNotNull(args[2],"Second argument (schema) missing");
+        String schema=checkNotNull(args[2],"Third argument (schema) missing");
         write(file,query, schema);
 
     }
