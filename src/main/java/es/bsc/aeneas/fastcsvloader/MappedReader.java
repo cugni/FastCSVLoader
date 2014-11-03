@@ -15,12 +15,7 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.NoSuchElementException;
-import java.util.Spliterator;
-import java.util.function.Consumer;
-
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * @author ccugnasc
@@ -67,11 +62,7 @@ public class MappedReader extends TrajectoryReader {
 
     }
 
-    @Override
-    public void forEachRemaining(Consumer<? super String[]> action) {
-
-    }
-
+  
 
     @Override
     public String[] next(String[] f) throws NoSuchElementException {
