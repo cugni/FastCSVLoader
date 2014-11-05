@@ -84,11 +84,15 @@ public class SSTableWriter {
          while(trajectoryReader.hasNext()){
             //let's reuse the array.
             line =line==null?trajectoryReader.next():trajectoryReader.next(line);
+            
+            
             if(binding==null)
              binding  = new Object[line.length];
+            
             for (int i = 0;i<parser.parsers.length;i++) {
                 binding[i] = parser.parsers[i].parse(line[i]);
             }
+            
             writer.addRow(binding);
 
 
