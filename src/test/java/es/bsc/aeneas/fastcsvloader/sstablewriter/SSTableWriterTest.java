@@ -10,7 +10,7 @@ import org.apache.commons.io.FileUtils;
 
 public class SSTableWriterTest {
     @Test
-    public void testWrite() throws InvalidRequestException, IOException {
+    public void testWrite() throws InvalidRequestException, IOException, InterruptedException {
         String query=  "INSERT INTO casedep.particle(" +
                 "time,part_id," +
                 "xcoord ,ycoord,zcoord," +
@@ -33,12 +33,11 @@ public class SSTableWriterTest {
                 "  PRIMARY KEY ((part_id), time)\n" +
                 ")";
         
-       File dir=new File("casedep/particle");
+       File dir=new File("output");
        FileUtils.deleteDirectory(dir);
-       FileUtils.deleteDirectory(dir.getParentFile());
        System.out.println("directory deleted:"+dir.delete());
         long start = System.currentTimeMillis();
-        SSTableWriter.write("src/test/resources/particles.csv",query,schema);
+        new SSTableWriter().write("src/test/resources/particles.csv",query,schema);
         /*SSTableWriter.write("/home/ccugnasc/Desktop/particleSintenticResults_60G.csv",query,schema);*/
         System.out.print("Inserted file in "+(System.currentTimeMillis()-start)/1000+" seconds");
     }
