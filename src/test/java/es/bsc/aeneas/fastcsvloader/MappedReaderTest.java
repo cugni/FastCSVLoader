@@ -1,8 +1,11 @@
 package es.bsc.aeneas.fastcsvloader;
 
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.util.Objects;
 
@@ -13,6 +16,7 @@ import static org.junit.Assert.assertTrue;
  * Created by ccugnasc on 4/15/14.
  */
 public class MappedReaderTest {
+    private static Logger log= LoggerFactory.getLogger(MappedReaderTest.class);
 
     Object[][] data=new Object[][]{
             {0.00016,11650,0.0838947,0.0253881,0.00635271,0.001569789950735867,0.003401139983907342,0.001958969980478287,2,1520,2},
@@ -50,5 +54,20 @@ public class MappedReaderTest {
 
     }
 
+
+    @Test
+    public void testRead1G() throws IOException {
+        File f=new File("src/test/resources/particles1G.csv");
+        if(!f.exists()){
+            log.warn("Skipping test 1G because file {} do not exists",f);
+            return;
+        }
+        MappedReader reader=new MappedReader(f,',');
+        double time=System.currentTimeMillis();
+        while(reader.hasNext()){
+            reader.next();
+        }
+        log.info("Completed reading in {} milliseconds",System.currentTimeMillis()-time);
+    }
 
 }

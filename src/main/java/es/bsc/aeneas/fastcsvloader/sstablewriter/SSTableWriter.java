@@ -32,6 +32,16 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class SSTableWriter {
     private final static Logger log= LoggerFactory.getLogger(SSTableWriter.class);
+    private final int CONCURRENCY;
+    public SSTableWriter() {
+        CONCURRENCY = Integer.getInteger("concurrency", 16);
+        log.info("Concurrency set to {}",CONCURRENCY);
+    }
+    public SSTableWriter(int concurrency) {
+        CONCURRENCY = concurrency;
+        log.info("Concurrency set to {}",CONCURRENCY);
+    }
+
 
     public static void main(String args[]) throws Exception {
         if(args.length!=3)
@@ -64,10 +74,10 @@ public class SSTableWriter {
             throw new RuntimeException("Cannot open the csv file",e);
         }
 
-        final ListeningExecutorService pool = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(16));
-        final CountDownLatch latch = new CountDownLatch(16);
+        final ListeningExecutorService pool = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(CONCURRENCY));
+        final CountDownLatch latch = new CountDownLatch(CONCURRENCY);
         done=false;
-        for(int i=0;i<16;i++){
+        for(int i=0;i<CONCURRENCY;i++){
             ListenableFuture<String> submit = pool.submit(new SSTableThreadWriter(keyspace,table,schema,query,i));
             Futures.addCallback(submit, new FutureCallback<String>() {
                 @Override
@@ -92,7 +102,7 @@ public class SSTableWriter {
         while(trajectoryReader.hasNext()){
             //let's reuse the array.
             String[] next = trajectoryReader.next();
-            while(!queue.offer(next,10,TimeUnit.SECONDS)){
+            while(!queue.offer(next,1,TimeUnit.SECONDS)){
              log.debug("Reader timeout exhausted");
             }
         }
@@ -142,7 +152,7 @@ public class SSTableWriter {
         public String call() throws InvalidRequestException, IOException, InterruptedException,NullPointerException {
             String[] line;
             while(!done) {
-                while ((line = queue.poll(10, TimeUnit.SECONDS)) == null) {
+                while ((line = queue.poll(1, TimeUnit.SECONDS)) == null) {
                     log.debug("Thread-{} timeout expired",number);
                     if (done)
                         return "Done "+number;
