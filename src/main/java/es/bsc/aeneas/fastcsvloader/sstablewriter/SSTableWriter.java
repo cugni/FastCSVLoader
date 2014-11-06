@@ -99,6 +99,7 @@ public class SSTableWriter {
         }
 
         log.info("Starting to read data");
+        long time=System.currentTimeMillis();
         while(trajectoryReader.hasNext()){
             //let's reuse the array.
             String[] next = trajectoryReader.next();
@@ -107,9 +108,9 @@ public class SSTableWriter {
             }
         }
         done=true;
-        log.info("Completed read the data");
+        log.info("Completed read the data in {} ms",System.currentTimeMillis()-time);
         latch.await();
-        log.info("All threads ended");
+        log.info("All threads ended after {} ms",System.currentTimeMillis()-time);
     }
 
     private class SSTableThreadWriter implements Callable<String>{
