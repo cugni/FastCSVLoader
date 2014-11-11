@@ -34,13 +34,15 @@ public class CqlFrameLoader {
      * @param queue
      */
 
-    public CqlFrameLoader(Iterator<String[]> queue, String queryText) {
+    public CqlFrameLoader(String queryText) {
         this.session = cluster().connect();
         log.info("preparing query \"{}\"", queryText);
         query = session.prepare(checkNotNull(queryText));
         parser=new CqlTypeConverter(query.getVariables().asList());
 
     }
+
+
 
 
 

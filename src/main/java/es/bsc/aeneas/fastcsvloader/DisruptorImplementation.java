@@ -32,7 +32,7 @@ public class DisruptorImplementation {
 
     public DisruptorImplementation(File file, char FS, String queryText) throws IOException {
         trajectoryReader = new MappedReader(file, FS);
-        this.cqlFrameLoader = new CqlFrameLoader(trajectoryReader, queryText);
+        this.cqlFrameLoader = new CqlFrameLoader(queryText);
     }
 
     public static void main(String args[]) throws InterruptedException, IOException {
