@@ -48,7 +48,7 @@ public class SSTablePIPEWriter {
    public static final String INSERT_QUERY = "INSERT INTO %s (frame,atom_id,x,y,z)\n" +
            "    VALUES (?,?,?,?,?);";
     public static void main(String args[]) throws Exception{
-        checkArgument(args.length==3,"Give me output,schema,query");
+        checkArgument(args.length==5,"Give me output,schema,query");
         write(new BufferedInputStream(System.in),args[0],args[1],args[2],args[3],args[4]);
     }
 
@@ -57,7 +57,7 @@ public class SSTablePIPEWriter {
 
         Config.setClientMode(true);
         log.info(query);
-
+        log.info(schema);
 
 
 
@@ -76,8 +76,8 @@ public class SSTablePIPEWriter {
         try {
             while (io.available() > 0) {
                 int read = 0;
-                while (read < 5) {
-                    read += io.read(b, read, 5 - read);
+                while (read < 20) {
+                    read += io.read(b, read,20 - read);
                 }
                 ByteBuffer bb = ByteBuffer.wrap(b);
                 int frame = bb.getInt(0);
@@ -85,6 +85,7 @@ public class SSTablePIPEWriter {
                 float x = bb.getFloat(8);
                 float y = bb.getFloat(12);
                 float z = bb.getFloat(16);
+                log.info("got {} {} {} {} {}",frame,atomId,x,y,z);
 
                  writer.addRow(frame, atomId, x, y, z);
 

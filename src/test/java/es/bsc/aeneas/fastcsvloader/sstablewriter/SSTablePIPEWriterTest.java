@@ -18,13 +18,13 @@ public class SSTablePIPEWriterTest {
     public void testWrite() throws IOException, InvalidRequestException {
 
         ByteBuffer bb = ByteBuffer.allocate(200);
-        Random r=new Random();
-        for(int i=0;i<20;i++){
-            bb.putInt(0,r.nextInt());
-            bb.putInt(4,r.nextInt());
-            bb.putFloat(8,r.nextFloat());
-            bb.putFloat(12,r.nextFloat());
-            bb.putFloat(16,r.nextFloat());
+
+        for(int i=0;i<10;i++){
+            bb.putInt(i);
+            bb.putInt(i*100);
+            bb.putFloat(1.23F);
+            bb.putFloat(2.34F);
+            bb.putFloat(3.45F);
         }
 
 
