@@ -124,7 +124,7 @@ public class RandomTextWriter  {
                         cqlLoader.insertBatch(bs);
                         done=true;
                     } catch (WriteTimeoutException wte){
-                        log.warn("Got timeout number {}, sleeping for {}",sleepFor);
+                        log.warn("Got timeout : retry {}, sleeping for {}",retry,sleepFor);
                         sleepFor*=2;
                         if(retry--==0)
                             throw wte;
