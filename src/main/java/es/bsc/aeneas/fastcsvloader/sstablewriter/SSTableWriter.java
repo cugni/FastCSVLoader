@@ -1,180 +1,133 @@
 package es.bsc.aeneas.fastcsvloader.sstablewriter;
 
-import com.google.common.util.concurrent.*;
-import es.bsc.aeneas.fastcsvloader.CqlTypeConverter;
-import es.bsc.aeneas.fastcsvloader.MappedReader;
+
 import org.apache.cassandra.config.Config;
-import org.apache.cassandra.cql3.CQLStatement;
-import org.apache.cassandra.cql3.ColumnSpecification;
-import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.cql3.statements.ParsedStatement;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.io.sstable.CQLSSTableWriter;
-import org.apache.cassandra.service.ClientState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * This class converts a CSV file into a SSTable Cassandra file.
  * The file can be then streamed into Cassandra.
  */
 public class SSTableWriter {
-    private final static Logger log= LoggerFactory.getLogger(SSTableWriter.class);
-    private final int CONCURRENCY;
-    public SSTableWriter() {
-        CONCURRENCY = Integer.getInteger("concurrency", 16);
-        log.info("Concurrency set to {}",CONCURRENCY);
-    }
-    public SSTableWriter(int concurrency) {
-        CONCURRENCY = concurrency;
-        log.info("Concurrency set to {}",CONCURRENCY);
+  private final static Logger log= LoggerFactory.getLogger(SSTableWriter.class);
+
+  public static final String COORDINATES_SCHEMA =  "CREATE TABLE IF NOT EXISTS %s  (\n" +
+           "            frame   int,\n" +
+           "            atom_id int,\n" +
+           "            x   float,\n" +
+           "            y   float,\n" +
+           "            z   float,\n" +
+           "            PRIMARY KEY(frame,atom_id)\n" +
+           "    )\n";
+
+   public static final String INSERT_QUERY = "INSERT INTO %s (frame,atom_id,x,y,z)\n" +
+           "    VALUES (?,?,?,?,?);";
+    private final CQLSSTableWriter writer;
+
+
+    public static void main(String args[]) throws Exception{
+        checkArgument(args.length==2,"Give me the path to bulkinsertion.txt, the ouput directory and the keyspace");
+        File bulkFile = new File(args[0]);
+        String output = args[1];
+        String keyspaceDotTable = args[2];
+
+
+        String schema=String.format(COORDINATES_SCHEMA,keyspaceDotTable);
+        String query=String.format(INSERT_QUERY,keyspaceDotTable);
+        SSTableWriter ssWriter = new SSTableWriter(output, schema, query);
+        //Reading bulkFile
+		BufferedReader readerBulk = null;
+		try {
+		    readerBulk = new BufferedReader(new FileReader(bulkFile));
+		    String textBulk = null;
+		    while ((textBulk = readerBulk.readLine()) != null) {
+		    	List<String> arguments = new LinkedList<String>(Arrays.asList(textBulk.split("\\s+")));
+		    	String idTraj = arguments.get(0);
+		    	String natoms = arguments.get(1);
+		    	File trajPath = new File(arguments.get(2));
+		    	String table = idTraj+".traj"; 
+		    	System.out.println("idTraj: "+idTraj+" natoms: "+natoms+" trajPath: "+trajPath);
+		    	// Reading traj and mdcrd parser
+		    	BufferedReader reader = null;
+		    	try {
+				    reader = new BufferedReader(new FileReader(trajPath));
+				    String text = null;
+				    text = reader.readLine(); //Ditch the first line (the title)
+				    int cont = 0;
+				    int frame = 0;
+				    while ((text = reader.readLine()) != null) {
+				    	List<String> textfloats = new LinkedList<String>(Arrays.asList(text.split("\\s+")));
+				    	textfloats.remove(0);
+                        List<Float> list=new ArrayList();
+				    	for (String tfloat : textfloats)
+				    		list.add(Float.parseFloat(tfloat));
+				    	cont++;
+				    	if(cont == 10){ //lread? what it was? the field in a line? it wasn't set.
+				    		if (frame%1000	 == 0) System.out.println("Frame: "+Integer.toString(frame));
+				    		//Writting
+                            ssWriter.write(list, frame);
+				    		frame++;
+				    		cont = 0;
+				    		list.clear();
+				    	}
+				    }
+				} 
+		    	catch (FileNotFoundException e) {   e.printStackTrace(); } 
+		    	catch (IOException e) { e.printStackTrace(); } 
+		    	finally { try { if (reader != null) reader.close(); } catch (IOException e) {} }
+		    }
+		    	    
+		}
+		catch (FileNotFoundException e) {e.printStackTrace();} 
+		catch (IOException e) {e.printStackTrace();	} 
+		finally {try { if (readerBulk != null) readerBulk.close(); } catch (IOException e) {} }
+		
     }
 
 
-    public static void main(String args[]) throws Exception {
-        if(args.length!=3)
-            throw new IllegalArgumentException("You must provide the name of the file and the query. Found "+args.length);
-        String file=checkNotNull(args[0],"Fist argument (file name) missing");
-        String query=checkNotNull(args[1],"Second argument (query) missing");
-        String schema=checkNotNull(args[2],"Third argument (schema) missing");
-        SSTableWriter writer = new SSTableWriter();
-        writer.write(file, query, schema);
-
-    }
-    final ArrayBlockingQueue<String[]> queue = new ArrayBlockingQueue<String[]>(1024);
-    private volatile boolean done=false;
-    public void write(String file, String query, String schema) throws InvalidRequestException, IOException, InterruptedException {
+    public SSTableWriter( String output, String schema, String query){
+        Config.setClientMode(true);
         Matcher matcher = Pattern.compile("insert +into +(?<keyspace>[^. ]+)\\.(?<table>[^. \\(]+).+", Pattern.CASE_INSENSITIVE).matcher(query);
         checkArgument(matcher.matches(),"Impossible to detect keyspace and table name from the query");
         String keyspace=matcher.group("keyspace");
         String table=matcher.group("table");
-        File f=new File(file);
-        checkArgument(f.exists(),"File not found");
-        String fs = System.getProperty("FS", ",");
-        checkArgument(fs.length()==1,"Supported only separators of 1 single char");
-        char FS=fs.charAt(0);
-        Config.setClientMode(true);
-
-        MappedReader trajectoryReader;
-        try {
-            trajectoryReader   = new MappedReader(f, FS);
-        } catch (IOException e) {
-            throw new RuntimeException("Cannot open the csv file",e);
+        log.info(query);
+        log.info(schema);
+        File outputDir = new File(output + File.separator + keyspace + File.separator + table);
+        if (!outputDir.exists() && !outputDir.mkdirs())
+        {
+            throw new RuntimeException("Cannot create output directory: " + outputDir);
         }
-
-        final ListeningExecutorService pool = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(CONCURRENCY));
-        final CountDownLatch latch = new CountDownLatch(CONCURRENCY);
-        done=false;
-        for(int i=0;i<CONCURRENCY;i++){
-            ListenableFuture<String> submit = pool.submit(new SSTableThreadWriter(keyspace,table,schema,query,i));
-            Futures.addCallback(submit, new FutureCallback<String>() {
-                @Override
-                public void onSuccess(String result) {
-                    log.info("one node has finished {} ",result);
-                    latch.countDown();
-                }
-
-                @Override
-                public void onFailure(Throwable t) {
-                    t.printStackTrace();
-                    log.error("one thread has dead for"+t);
-                    done=true;
-                    pool.shutdown();
-                    latch.countDown();
-                }
-            })
-            ;
-        }
-
-        log.info("Starting to read data");
-        long time=System.currentTimeMillis();
-        while(trajectoryReader.hasNext()){
-            //let's reuse the array.
-            String[] next = trajectoryReader.next();
-            while(!queue.offer(next,1,TimeUnit.SECONDS)){
-             log.debug("Reader timeout exhausted");
-            }
-        }
-        done=true;
-        log.info("Completed read the data in {} ms",System.currentTimeMillis()-time);
-        latch.await();
-        log.info("All threads ended after {} ms",System.currentTimeMillis()-time);
+        writer = CQLSSTableWriter.builder().inDirectory(outputDir)
+                .forTable(schema)
+                .using(query)
+                .withPartitioner(new Murmur3Partitioner())
+                .build();
     }
 
-    private class SSTableThreadWriter implements Callable<String>{
+    public void write(List<Float> frameList, int frame) throws IOException, InvalidRequestException {
 
-        private final CQLSSTableWriter writer;
-        private final CqlTypeConverter parser;
-        private final int number;
 
-        SSTableThreadWriter(String keyspace,String table,String schema,String query,int number) {
-            this.number=number;
+       int atomId = 0;
+       for (int i = 0; i < frameList.size()-2; i = i + 3) {
+                 writer.addRow(frame, atomId, frameList.get(i), frameList.get(i+1), frameList.get(i+2));
+                 atomId++;
 
-            File outputDir = new File("output"+File.separator
-                    +"thread-"+number+File.separator+keyspace + File.separator + table);
-            if (!outputDir.exists() && !outputDir.mkdirs())
-            {
-                throw new RuntimeException("Cannot create output directory: " + outputDir);
-            }
-            writer = CQLSSTableWriter.builder().inDirectory(outputDir)
-                    .forTable(schema)
-                    .using(query)
-                    .withPartitioner(new Murmur3Partitioner())
-                    .build();
-            List<ColumnSpecification> metaData;
-            try {
-
-                ClientState state = ClientState.forInternalCalls();
-                ParsedStatement.Prepared prepared = QueryProcessor.getStatement(query, state);
-                CQLStatement stmt = prepared.statement;
-                stmt.validate(state);
-                metaData=prepared.boundNames;
-            } catch (Exception e) {
-                throw new RuntimeException("Impossible to get the schema",e);
-            }
-            parser=new CqlTypeConverter(metaData);
-        }
-
-        private Object[] binding;
-
-        @Override
-        public String call() throws InvalidRequestException, IOException, InterruptedException,NullPointerException {
-            String[] line;
-            while(!done) {
-                while ((line = queue.poll(1, TimeUnit.SECONDS)) == null) {
-                    log.debug("Thread-{} timeout expired",number);
-                    if (done)
-                        return "Done "+number;
-                }
-
-                if (binding == null)
-                    binding = new Object[line.length];
-                for (int i = 0; i < parser.parsers.length; i++) {
-                    if(line[i]==null){
-                        System.err.println(Arrays.toString(line));
-                        throw new IOException("Found a null in thread+"+number);
-                    }
-                    binding[i] = parser.parsers[i].parse(line[i]);
-
-                }
-                writer.addRow(binding);
-
-            }
-            writer.close();
-            return "Done "+number;
-        }
-    }
+       }
+   }
 
 }
