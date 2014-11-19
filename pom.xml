@@ -92,7 +92,7 @@
 	    <artifactId>maven-surefire-plugin</artifactId>
 	    <configuration>
 	      <forkMode>pertest</forkMode>
-	      <argLine>-Xms2g -Xmx8g</argLine>
+	      <argLine>-Xms2g -Xmx4g</argLine>
 	      <testFailureIgnore>false</testFailureIgnore>
 	      <skip>false</skip>
 	    </configuration>
