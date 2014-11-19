@@ -9,10 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,71 +37,36 @@ public class SSTableWriter {
 
 
     public static void main(String args[]) throws Exception{
-        checkArgument(args.length==2,"Give me the path to bulkinsertion.txt, the ouput directory and the keyspace");
+        checkArgument(args.length == 3, "Give me the path to bulkinsertion.txt, the ouput directory and the keyspace");
+
         File bulkFile = new File(args[0]);
         String output = args[1];
-        String keyspaceDotTable = args[2];
+        String keyspace = args[2];
 
+        Scanner s= new Scanner(bulkFile);
 
-        String schema=String.format(COORDINATES_SCHEMA,keyspaceDotTable);
-        String query=String.format(INSERT_QUERY,keyspaceDotTable);
-        SSTableWriter ssWriter = new SSTableWriter(output, schema, query);
-        //Reading bulkFile
-		BufferedReader readerBulk = null;
-		try {
-		    readerBulk = new BufferedReader(new FileReader(bulkFile));
-		    String textBulk = null;
-		    while ((textBulk = readerBulk.readLine()) != null) {
-		    	List<String> arguments = new LinkedList<String>(Arrays.asList(textBulk.split("\\s+")));
-		    	String idTraj = arguments.get(0);
-		    	String natoms = arguments.get(1);
-		    	File trajPath = new File(arguments.get(2));
-		    	String table = idTraj+".traj"; 
-		    	System.out.println("idTraj: "+idTraj+" natoms: "+natoms+" trajPath: "+trajPath);
-		    	// Reading traj and mdcrd parser
-		    	BufferedReader reader = null;
-		    	try {
-				    reader = new BufferedReader(new FileReader(trajPath));
-				    String text = null;
-				    text = reader.readLine(); //Ditch the first line (the title)
-				    int cont = 0;
-				    int frame = 0;
-				    while ((text = reader.readLine()) != null) {
-				    	List<String> textfloats = new LinkedList<String>(Arrays.asList(text.split("\\s+")));
-				    	textfloats.remove(0);
-                        List<Float> list=new ArrayList();
-				    	for (String tfloat : textfloats)
-				    		list.add(Float.parseFloat(tfloat));
-				    	cont++;
-				    	if(cont == 10){ //lread? what it was? the field in a line? it wasn't set.
-				    		if (frame%1000	 == 0) System.out.println("Frame: "+Integer.toString(frame));
-				    		//Writting
-                            ssWriter.write(list, frame);
-				    		frame++;
-				    		cont = 0;
-				    		list.clear();
-				    	}
-				    }
-				} 
-		    	catch (FileNotFoundException e) {   e.printStackTrace(); } 
-		    	catch (IOException e) { e.printStackTrace(); } 
-		    	finally { try { if (reader != null) reader.close(); } catch (IOException e) {} }
-		    }
-		    	    
-		}
-		catch (FileNotFoundException e) {e.printStackTrace();} 
-		catch (IOException e) {e.printStackTrace();	} 
-		finally {try { if (readerBulk != null) readerBulk.close(); } catch (IOException e) {} }
-		
+        while(s.hasNext()) {
+            String trajName=   s.next();
+            Integer atomNum= s.nextInt();
+            String path=s.next();
+            String table=keyspace+"."+trajName+"_ctrj";
+            log.info("Starting loading {} of {} atoms in {} ", path,atomNum,table);
+
+            String schema = String.format(COORDINATES_SCHEMA, table);
+            String query = String.format(INSERT_QUERY, table);
+            SSTableWriter ssWriter = new SSTableWriter(output, schema, query,keyspace,trajName+"_ctrj");
+            File trajFile=new File(path);
+            TrajectoryReader tr = new TrajectoryReader(trajFile,' ',atomNum,ssWriter);
+            int read = tr.call();
+            log.info("Finished inserting {} positions",read);
+
+        }
+
     }
 
 
-    public SSTableWriter( String output, String schema, String query){
+    public SSTableWriter( String output, String schema, String query,String keyspace,String table){
         Config.setClientMode(true);
-        Matcher matcher = Pattern.compile("insert +into +(?<keyspace>[^. ]+)\\.(?<table>[^. \\(]+).+", Pattern.CASE_INSENSITIVE).matcher(query);
-        checkArgument(matcher.matches(),"Impossible to detect keyspace and table name from the query");
-        String keyspace=matcher.group("keyspace");
-        String table=matcher.group("table");
         log.info(query);
         log.info(schema);
         File outputDir = new File(output + File.separator + keyspace + File.separator + table);
@@ -119,15 +81,10 @@ public class SSTableWriter {
                 .build();
     }
 
-    public void write(List<Float> frameList, int frame) throws IOException, InvalidRequestException {
+    public void write(int frame, int atomId,float x,float y,float z) throws IOException, InvalidRequestException {
 
+             writer.addRow(frame, atomId, x, y,z);
 
-       int atomId = 0;
-       for (int i = 0; i < frameList.size()-2; i = i + 3) {
-                 writer.addRow(frame, atomId, frameList.get(i), frameList.get(i+1), frameList.get(i+2));
-                 atomId++;
-
-       }
    }
 
 }
