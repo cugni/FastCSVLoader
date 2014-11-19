@@ -19,7 +19,7 @@ import static com.google.common.base.Preconditions.checkArgument;
  * This class converts a CSV file into a SSTable Cassandra file.
  * The file can be then streamed into Cassandra.
  */
-public class SSTableWriter {
+public class SSTableWriter implements AtomsWriter {
   private final static Logger log= LoggerFactory.getLogger(SSTableWriter.class);
 
   public static final String COORDINATES_SCHEMA =  "CREATE TABLE IF NOT EXISTS %s  (\n" +
@@ -81,7 +81,8 @@ public class SSTableWriter {
                 .build();
     }
 
-    public void write(int frame, int atomId,float x,float y,float z) throws IOException, InvalidRequestException {
+    @Override
+    public void write(int frame, int atomId, float x, float y, float z) throws IOException, InvalidRequestException {
 
              writer.addRow(frame, atomId, x, y,z);
 

@@ -4,12 +4,8 @@ package es.bsc.aeneas.fastcsvloader.sstablewriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.concurrent.Callable;
 
 /**
@@ -22,35 +18,27 @@ public class TrajectoryReader implements Callable<Integer> {
 
     private final static Logger log = LoggerFactory.getLogger(TrajectoryReader.class);
     private final File trajfile;
-    private SSTableWriter writer;
+    private AtomsWriter writer;
     private final long filesize;
     private final char FS;
     private final int numberOfAtoms;
-    private FileChannel fc0;
-    private MappedByteBuffer buffer;
-    private final int MAX_WINDOW_SIZE = Integer.MAX_VALUE;
-    private final boolean windowed;
+    private BufferedReader fc0;;
     private long position = 0;
 
 
     private ByteBuffer bb = ByteBuffer.allocate(64);
 
 
-    public TrajectoryReader(File trajfile, char FS, int numberOfAtoms, SSTableWriter writer) throws IOException {
+    public TrajectoryReader(File trajfile, char FS, int numberOfAtoms, AtomsWriter writer) throws IOException {
         this.FS = FS;
         this.numberOfAtoms = numberOfAtoms;
 
         this.trajfile = trajfile;
         this.writer = writer;
         this.filesize = trajfile.length();
-        fc0 = new FileInputStream(trajfile).getChannel();
-        if (filesize > MAX_WINDOW_SIZE) {
-            windowed = true;
-            buffer = fc0.map(FileChannel.MapMode.READ_ONLY, 0, MAX_WINDOW_SIZE);
-        } else {
-            windowed = false;
-            buffer = fc0.map(FileChannel.MapMode.READ_ONLY, 0, filesize);
-        }
+        fc0 = new BufferedReader(new FileReader(trajfile));
+
+
 
     }
 
@@ -69,10 +57,11 @@ public class TrajectoryReader implements Callable<Integer> {
 
         int frame = 0;
         int count = 0;
-        while(buffer.get()!='\n');
 
-        while (buffer.remaining() > 0 || rebuffer()) {
-            byte c = buffer.get();
+        while(fc0.read()!='\n');
+
+        byte c;
+        while ((c = (byte) fc0.read())!=-1) {
             /**
              * That's a state machine with 2 states. Word and not word
              */
@@ -116,29 +105,7 @@ public class TrajectoryReader implements Callable<Integer> {
 
     }
 
-    private boolean rebuffer() {
-        if (!windowed) {
-            //No need to rebuffer, the file is complete
-            return false;
-        } else {
-            position += MAX_WINDOW_SIZE;
-            long size;
-            if (filesize - position > MAX_WINDOW_SIZE)
-                size = MAX_WINDOW_SIZE;
-            else
-                size = filesize - position;
-            log.info("ReBuffering with a new position {} with size {}", position, size);
-            try {
-                fc0.close();
-                fc0 = new FileInputStream(trajfile).getChannel();
-                buffer = fc0.map(FileChannel.MapMode.READ_ONLY, position, size);
-            } catch (IOException e) {
-                log.error("IOException", e);
-                throw new AssertionError(e);
-            }
-            return buffer.remaining() > 0;
-        }
-    }
+
 
 
 }
