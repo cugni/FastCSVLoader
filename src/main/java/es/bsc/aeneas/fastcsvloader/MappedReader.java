@@ -32,9 +32,9 @@ public class MappedReader extends TrajectoryReader {
     private final int MAX_WINDOW_SIZE = Integer.MAX_VALUE;
     private final boolean windowed;
     private long position = 0;
+    private final int MAX_LINE_SIZE=Integer.getInteger("maxLineSize",256);
 
 
-    private ByteBuffer bb = ByteBuffer.allocate(64);
 
 
     public MappedReader(File trajfile, char FS) throws IOException {
@@ -75,7 +75,7 @@ public class MappedReader extends TrajectoryReader {
 
 
         boolean word = false;
-        byte[] point = new byte[256];
+        byte[] point = new byte[MAX_LINE_SIZE];
         int ppos = 0;
         float[] position = new float[3];
         int xyz = 0;
@@ -91,15 +91,15 @@ public class MappedReader extends TrajectoryReader {
                 if (word) {
                     word = false;
                     String num = new String(point, 0, ppos);
-                    log.trace("scanned  {}", num);
+                   // log.trace("scanned  {}", num);
                     // position.putFloat(54444);
                     f[xyz++] = num;
                     ppos = 0;
                     count++;
                     if (c == '\n') {
                         //line completed.
-                        if (log.isTraceEnabled())
-                            log.trace("Read line  {}", Arrays.toString(f));
+                      //  if (log.isTraceEnabled())
+                        //    log.trace("Read line  {}", Arrays.toString(f));
                         return f;
                     }
                 }
