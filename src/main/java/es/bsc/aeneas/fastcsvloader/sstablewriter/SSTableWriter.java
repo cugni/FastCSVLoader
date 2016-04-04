@@ -2,6 +2,8 @@ package es.bsc.aeneas.fastcsvloader.sstablewriter;
 
 import es.bsc.aeneas.fastcsvloader.CqlTypeConverter;
 import es.bsc.aeneas.fastcsvloader.MappedReader;
+import es.bsc.aeneas.fastcsvloader.NIOReader;
+import es.bsc.aeneas.fastcsvloader.TrajectoryReader;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.cql3.CQLStatement;
 import org.apache.cassandra.cql3.ColumnSpecification;
@@ -30,36 +32,50 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class SSTableWriter {
 
     public static void main(String args[]) throws Exception {
-        if(args.length!=3)
-            throw new IllegalArgumentException("You must provide the name of the file and the query. Found "+args.length);
-        String file=checkNotNull(args[0],"Fist argument (file name) missing");
-        String query=checkNotNull(args[1],"Second argument (query) missing");
-        String schema=checkNotNull(args[2],"Third argument (schema) missing");
-        write(file,query, schema);
+        if (args.length != 3)
+            throw new IllegalArgumentException("You must provide the name of the file and the query. Found " + args.length);
+        String file = checkNotNull(args[0], "Fist argument (file name) missing");
+        String query = checkNotNull(args[1], "Second argument (query) missing");
+        String schema = checkNotNull(args[2], "Third argument (schema) missing");
+        write(file, query, schema);
 
     }
+
     public static void write(String file, String query, String schema) throws InvalidRequestException, IOException {
         Matcher matcher = Pattern.compile("insert +into +(?<keyspace>[^. ]+)\\.(?<table>[^. \\(]+).+", Pattern.CASE_INSENSITIVE).matcher(query);
-        checkArgument(matcher.matches(),"Impossible to detect keyspace and table name from the query");
-        String keyspace=matcher.group("keyspace");
-        String table=matcher.group("table");
-        File f=new File(file);
-        checkArgument(f.exists(),"File not found");
+        checkArgument(matcher.matches(), "Impossible to detect keyspace and table name from the query");
+        String keyspace = matcher.group("keyspace");
+        String table = matcher.group("table");
+        File f = new File(file);
+        checkArgument(f.exists(), "File not found");
         String fs = System.getProperty("FS", ",");
-        checkArgument(fs.length()==1,"Supported only separators of 1 single char");
-        char FS=fs.charAt(0);
+        checkArgument(fs.length() == 1, "Supported only separators of 1 single char");
+        char FS = fs.charAt(0);
 
-        MappedReader trajectoryReader;
+        TrajectoryReader trajectoryReader;
+        String reader = System.getProperty("reader", "NIO");
+
         try {
-            trajectoryReader   = new MappedReader(f, FS);
+            switch (reader) {
+                case "NIO":
+                    trajectoryReader = new NIOReader(f, FS);
+                    break;
+                case "MappedFile":
+                    trajectoryReader = new MappedReader(f, FS);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Reader " + reader + " unknown");
+            }
+
+
         } catch (IOException e) {
-            throw new RuntimeException("Cannot open the csv file",e);
+            throw new RuntimeException("Cannot open the csv file", e);
         }
+        System.out.println("Using reader " + reader);
         Config.setClientMode(true);
 
         File outputDir = new File(keyspace + File.separator + table);
-        if (!outputDir.exists() && !outputDir.mkdirs())
-        {
+        if (!outputDir.exists() && !outputDir.mkdirs()) {
             throw new RuntimeException("Cannot create output directory: " + outputDir);
         }
         CQLSSTableWriter writer = CQLSSTableWriter.builder().inDirectory(outputDir)
@@ -74,28 +90,30 @@ public class SSTableWriter {
             ParsedStatement.Prepared prepared = QueryProcessor.getStatement(query, state);
             CQLStatement stmt = prepared.statement;
             stmt.validate(state);
-            metaData=prepared.boundNames;
+            metaData = prepared.boundNames;
         } catch (Exception e) {
-            throw new RuntimeException("Impossible to get the schema",e);
+            throw new RuntimeException("Impossible to get the schema", e);
         }
-        CqlTypeConverter parser=new CqlTypeConverter(metaData);
-        String[] line=null;
-        Object[] binding=null;
-         while(trajectoryReader.hasNext()){
+        CqlTypeConverter parser = new CqlTypeConverter(metaData);
+        String[] line = null;
+        Object[] binding = null;
+        while (trajectoryReader.hasNext()) {
             //let's reuse the array.
-            line =line==null?trajectoryReader.next():trajectoryReader.next(line);
-            
-            
-            if(binding==null)
-             binding  = new Object[line.length];
-            
-            for (int i = 0;i<parser.parsers.length;i++) {
+            line = line == null ? trajectoryReader.next() : trajectoryReader.next(line);
+
+
+            if (binding == null)
+                binding = new Object[line.length];
+
+            for (int i = 0; i < parser.parsers.length; i++) {
                 binding[i] = parser.parsers[i].parse(line[i]);
             }
-            
+
             writer.addRow(binding);
 
 
         }
+        writer.close();
+        System.out.println("Loading completed");
     }
 }

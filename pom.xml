@@ -74,7 +74,9 @@
                     <fork>true</fork>
                     <meminitial>1g</meminitial>
                     <maxmem>4g</maxmem>
-                </configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                 </configuration>
             </plugin>
             <plugin>
                 <artifactId>maven-assembly-plugin</artifactId>
