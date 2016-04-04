@@ -58,7 +58,6 @@ public class DisruptorImplementation {
         Executor executor = Executors.newFixedThreadPool(nConsumers, new ThreadFactory() {
             private int i = 0;
 
-            @Override
             public Thread newThread(Runnable r) {
                 log.info("Created thread {}", i);
                 return new Thread(r, "DisThread-" + i++);
@@ -74,7 +73,7 @@ public class DisruptorImplementation {
         log.info("Using {} concurrent consumers with a buffer size of {}",nConsumers,bufferSize);
 // Construct the Disruptor
 
-        Disruptor<String[]> disruptor = new Disruptor(new EventFactory<String[]>() {
+        Disruptor disruptor = new Disruptor(new EventFactory<String[]>() {
             @Override
             public String[] newInstance() {
 

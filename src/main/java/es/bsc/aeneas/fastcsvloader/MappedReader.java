@@ -55,7 +55,6 @@ public class MappedReader extends TrajectoryReader {
 
 
 
-    @Override
     public boolean hasNext() {
         //To check
         return buffer.remaining() > 0;

@@ -40,7 +40,6 @@ public abstract class TrajectoryReader implements Iterator<String[]> {
         return next(f);
     }
 
-    @Override
     public void remove() {
         throw new UnsupportedOperationException("ReadOnly list");
     }
